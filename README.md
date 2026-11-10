@@ -74,7 +74,7 @@ For an audio file named `<name>.m4a`, the program creates these files in the sam
 |---|---|---|
 | `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
 | `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
-| `<name> (review).txt` | transcribe | the transcript you correct by hand |
+| `<name> (review).txt` | transcribe | the transcript you correct by hand. Exists only while reviewing. |
 | `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
 | `<name>.txt` | review | the official transcript: your reviewed text |
 | `<name>.srt` | review | the official subtitles, made from your reviewed text |
@@ -82,7 +82,15 @@ For an audio file named `<name>.m4a`, the program creates these files in the sam
 | `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
 
 The name says the stage: `(review)` means the file is still being reviewed. A name without
-`(review)` is official. Do not edit the official files; edit the `(review)` transcript and run the program again.
+`(review)` is official. Confirming the review renames `(review).txt` to `<name>.txt`.
+To correct an official transcript, run the program and choose to reopen the review: it creates
+`(review).txt` again as a copy of the official one.
+
+### Progress
+
+Each long step shows a bar with its own exact progress: decoding the audio, transcribing,
+and rendering video. Loading the model has no progress information, so it shows only the time.
+The whole recording is transcribed in one pass, so the bar is continuous.
 
 There is no status file. The program knows the step from which files exist and from `<name>.sha256`:
 a `subtitles` entry there means a review was confirmed.
@@ -115,6 +123,7 @@ render_video.py         black video with audio, optionally with subtitles
 provenance.py           hashes and the <name>.sha256 record
 whisper-transcribe.cmd  Windows wrapper: sets environment variables, runs the program
 add-to-path.cmd         double-click once: adds this folder to the user PATH
+progress.py             one progress line per step: stage, bar, percent, time left
 CLAUDE.md               guidance for AI assistants working on this code
 ```
 
