@@ -6,10 +6,9 @@ The program reads the files that already exist there and tells you the next step
 
 File names show the stage:
 
-  <name>.txt.bck               automatic transcript, untouched. Do not edit.
-  <name>.srt.bck               automatic subtitles, untouched. Gives the timing.
+  <name> (review).txt.bck      copy of the transcript before review. Do not edit.
+  <name> (review).srt.bck      copy of the subtitles before review. Gives the timing.
   <name> (review).txt          the transcript you correct by hand.
-  <name> (review).srt          automatic subtitles, to compare with the audio.
   <name> (review).mp4          video with the audio and the automatic subtitles.
   <name>.txt                   official transcript: the reviewed text, once confirmed.
   <name>.srt                   official subtitles: made from the reviewed text.
@@ -18,8 +17,8 @@ File names show the stage:
 
 The steps, decided by the files and by the record:
 
-  1. No "<name>.txt.bck" yet:   transcribe. Creates the automatic files and the
-                                "(review)" files.
+  1. No "<name> (review).txt.bck" yet: transcribe. Creates the backups and the
+                                       working transcript.
   2. No "subtitles" entry in "<name>.sha256" yet: review. You correct
      "<name> (review).txt" by hand. When you run again, the program shows what
      changed and asks you to confirm. Then it writes the official files.
@@ -75,10 +74,9 @@ def paths_for(audio):
     base = os.path.splitext(audio)[0]
     return {
         "base": base,
-        "txt_raw": base + ".txt.bck",
-        "srt_raw": base + ".srt.bck",
+        "txt_raw": base + " (review).txt.bck",
+        "srt_raw": base + " (review).srt.bck",
         "txt_review": base + " (review).txt",
-        "srt_review": base + " (review).srt",
         "video_review": base + " (review).mp4",
         "txt": base + ".txt",
         "srt": base + ".srt",
@@ -111,7 +109,6 @@ def write_transcript_files(p, audio, segments, model_name, info):
         for n, (start, end, text) in enumerate(segments, 1):
             f.write(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{text}\n\n")
     shutil.copyfile(p["txt_raw"], p["txt_review"])
-    shutil.copyfile(p["srt_raw"], p["srt_review"])
 
 
 # -------------------------------------------------------------- step 1
@@ -153,13 +150,13 @@ def step_transcribe(audio, p, args):
     )
 
     print("\nWriting the review video (with the automatic subtitles)...")
-    render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_review"])
+    render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"])
     provenance.append_event(p["base"], "review-video",
                             file=os.path.basename(p["video_review"]),
                             sha256=provenance.file_sha256(p["video_review"]))
 
     print(f"\nTranscript created: {len(segments)} segments.")
-    show_files(p, ["txt_raw", "srt_raw", "txt_review", "srt_review", "video_review"])
+    show_files(p, ["txt_raw", "srt_raw", "txt_review", "video_review"])
     print("\nNEXT STEP: review the transcript.")
     print(f"  1. Open {os.path.basename(p['txt_review'])} and {os.path.basename(p['video_review'])}"
           " (the video shows the automatic subtitles).")

@@ -17,7 +17,7 @@ a person through reviewing the transcript, and produces subtitles and a video.
   on the folder it is run from. Machine-specific settings (the Python interpreter,
   the model cache) come from environment variables, set in `whisper-transcribe.cmd`.
 - Nothing is sent to external services. The tool is offline by design.
-- Never overwrite a file a person may have edited. The `.txt.bck` and `.srt.bck`
+- Never overwrite a file a person may have edited. The `(review).txt.bck` and `(review).srt.bck`
   files are the reference for later steps: keep them.
 - There is no status file. The current step comes from which files exist and from
   the hashes in `<name>.sha256`. Do not add a separate state file.

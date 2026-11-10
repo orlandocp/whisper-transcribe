@@ -72,10 +72,9 @@ For an audio file named `<name>.m4a`, the program creates these files in the sam
 
 | File | Created | Meaning |
 |---|---|---|
-| `<name>.txt.bck` | transcribe | the untouched automatic transcript. Do not edit it. |
-| `<name>.srt.bck` | transcribe | the untouched automatic subtitles. Keeps the timing. |
+| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
+| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
 | `<name> (review).txt` | transcribe | the transcript you correct by hand |
-| `<name> (review).srt` | transcribe | the automatic subtitles, to compare with the audio |
 | `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
 | `<name>.txt` | review | the official transcript: your reviewed text |
 | `<name>.srt` | review | the official subtitles, made from your reviewed text |
