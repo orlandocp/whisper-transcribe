@@ -8,7 +8,7 @@ The program tells you what to do next. You do not need to remember any option.
 
 ## Requirements
 
-- Windows, with Python 3.12. The wrapper script `whisper-transcribe.cmd` is written for Windows.
+- Windows, with Python 3.12. The wrapper `whisper-transcribe.cmd` is written for Windows.
 - `ffmpeg` and `ffprobe` on the `PATH`.
 - The Python package `faster-whisper`, and optionally `torch` with CUDA for GPU use.
 - No GPU is required. Without one, the program runs on the CPU, which is slower.
@@ -18,7 +18,7 @@ The program tells you what to do next. You do not need to remember any option.
 Clone the repository and create a Python environment for it:
 
 ```powershell
-git clone <REPOSITORY-URL> whisper-transcribe
+git clone https://github.com/orlandocp/whisper-transcribe.git
 py -3.12 -m venv D:\venv-whisper
 D:\venv-whisper\Scripts\python -m pip install faster-whisper
 ```
@@ -49,15 +49,20 @@ whisper-transcribe
 Supported audio: `.m4a`, `.mp3`, `.wav`, `.ogg`, `.opus`, `.aac`, `.flac`.
 If the folder has more than one audio file, the program asks which one to use.
 
-The program then works in steps. Each time you run it, it checks which files exist next to the audio and continues from there.
+The program works in steps. Each time you run it, it checks which files exist next to the audio and continues from there.
 
-1. **Transcribe.** It asks which model to use (Enter keeps `large-v3-turbo`). It creates the transcript, the automatic subtitles, and a review video that shows those subtitles.
-2. **Review.** Correct `<name> (review).txt` by listening to the audio. Run `whisper-transcribe` again. It shows every change and asks you to confirm.
+1. **Transcribe.** It asks which model to use (Enter keeps `large-v3-turbo`). It creates the
+   transcript, the automatic subtitles, and a black review video.
+2. **Review.** Correct `<name> (review).txt` by listening to the audio, while you watch
+   `<name> (review).mp4` in a player. Its subtitles file `<name> (review).srt` sits next to it
+   and loads automatically, so you can compare the automatic text with the audio.
+   Run `whisper-transcribe` again. It shows every change and asks you to confirm.
    If you did not change anything, it asks you to confirm that the automatic transcript is official as it is.
-   Then it creates the subtitles.
-3. **Video.** It offers to render the video with the subtitles burned in.
+3. **Final video.** After you confirm, the program renders `<name>.mp4` with the reviewed subtitles
+   burned in, and removes the review files.
 
-Run it again at any time. If the transcript or the audio changed since the last run, it tells you.
+Run it again at any time. If the official files were changed by hand, it tells you.
+To correct a confirmed text, it offers to reopen the review.
 
 ### Model choice
 
@@ -65,26 +70,6 @@ Run it again at any time. If the transcript or the audio changed since the last 
 |---|---|---|
 | `large-v3-turbo` (default) | faster | close to `large-v3` |
 | `large-v3` | slower | the most accurate of the two |
-
-## Files
-
-For an audio file named `<name>.m4a`, the program creates these files in the same folder:
-
-| File | Created | Meaning |
-|---|---|---|
-| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
-| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
-| `<name> (review).txt` | transcribe | the transcript you correct by hand. Exists only while reviewing. |
-| `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
-| `<name>.txt` | review | the official transcript: your reviewed text |
-| `<name>.srt` | review | the official subtitles, made from your reviewed text |
-| `<name>.mp4` | review or later | the official video, with the subtitles burned in |
-| `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
-
-The name says the stage: `(review)` means the file is still being reviewed. A name without
-`(review)` is official. Confirming the review renames `(review).txt` to `<name>.txt`.
-To correct an official transcript, run the program and choose to reopen the review: it creates
-`(review).txt` again as a copy of the official one.
 
 ### Progress
 
@@ -103,80 +88,29 @@ estimated from the speed measured so far in that step. Elapsed and left time upd
 
 This needs a terminal that redraws in place, such as Windows Terminal or the classic console.
 
-### Model choice
-
-| Model | Speed | Accuracy |
-|---|---|---|
-| `large-v3-turbo` (default) | faster | close to `large-v3` |
-| `large-v3` | slower | the most accurate of the two |
-
 ## Files
 
-For an audio file named `<name>.m4a`, the program creates these files in the same folder:
+While reviewing, the folder holds:
 
 | File | Created | Meaning |
 |---|---|---|
-| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
-| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
-| `<name> (review).txt` | transcribe | the transcript you correct by hand. Exists only while reviewing. |
-| `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
-| `<name>.txt` | review | the official transcript: your reviewed text |
-| `<name>.srt` | review | the official subtitles, made from your reviewed text |
-| `<name>.mp4` | review or later | the official video, with the subtitles burned in |
-| `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
+| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. Kept. |
+| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. Kept. |
+| `<name> (review).txt` | transcribe | the transcript you correct by hand. Removed when confirmed. |
+| `<name> (review).srt` | transcribe | the automatic subtitles, to compare in a player. Removed when confirmed. |
+| `<name> (review).mp4` | transcribe | black video with the audio, no burned subtitles. Removed when confirmed. |
 
-The name says the stage: `(review)` means the file is still being reviewed. A name without
-`(review)` is official. Confirming the review renames `(review).txt` to `<name>.txt`.
-To correct an official transcript, run the program and choose to reopen the review: it creates
-`(review).txt` again as a copy of the official one.
-
-### Progress
-
-Two lines show the work:
-
-- **Total (decode + transcription)**: the measurable work of the whole run. Its share is
-  estimated from the speed measured on this run, so it reads "estimating..." until transcription
-  has processed a little audio.
-- **The current step**: its own bar when it has measurable progress (decoding, transcribing,
-  rendering video). Loading the model shows only its elapsed time, because it has no measurable progress.
-
-Loading the model and rendering video are not part of the total.
-
-### Model choice
-
-| Model | Speed | Accuracy |
-|---|---|---|
-| `large-v3-turbo` (default) | faster | close to `large-v3` |
-| `large-v3` | slower | the most accurate of the two |
-
-## Files
-
-For an audio file named `<name>.m4a`, the program creates these files in the same folder:
+After you confirm the review:
 
 | File | Created | Meaning |
 |---|---|---|
-| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
-| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
-| `<name> (review).txt` | transcribe | the transcript you correct by hand. Exists only while reviewing. |
-| `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
-| `<name>.txt` | review | the official transcript: your reviewed text |
-| `<name>.srt` | review | the official subtitles, made from your reviewed text |
-| `<name>.mp4` | review or later | the official video, with the subtitles burned in |
+| `<name>.txt` | confirm | the official transcript: your reviewed text |
+| `<name>.mp4` | confirm | the final video, with the reviewed subtitles burned in. This is the one to share. |
 | `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
 
-The name says the stage: `(review)` means the file is still being reviewed. A name without
-`(review)` is official. Confirming the review renames `(review).txt` to `<name>.txt`.
-To correct an official transcript, run the program and choose to reopen the review: it creates
-`(review).txt` again as a copy of the official one.
-
-### Progress
-
-Each long step shows a bar with its own exact progress: decoding the audio, transcribing,
-and rendering video. Loading the model has no progress information, so it shows only the time.
-The whole recording is transcribed in one pass, so the bar is continuous.
-
-There is no status file. The program knows the step from which files exist and from `<name>.sha256`:
-a `subtitles` entry there means a review was confirmed.
+The name says the stage: `(review)` means the file belongs to the review. A name without
+`(review)` is official. To correct an official transcript, run the program and choose to reopen
+the review: it creates the `(review)` files again from the official text.
 
 ### What the record contains
 
@@ -184,7 +118,7 @@ a `subtitles` entry there means a review was confirmed.
 
 ```
 2026-11-10 13:42:12 UTC  transcribed  audio_sha256=…  model=large-v3-turbo  language=es  device=cuda  compute=int8  faster_whisper=1.2.1  program=<commit>
-2026-11-10 13:42:20 UTC  subtitles    txt_sha256=…  srt_sha256=…  changed_lines=3  unchanged_confirmed=no  unmatched=0
+2026-11-10 13:42:20 UTC  subtitles    txt_sha256=…  changed_lines=3  unchanged_confirmed=no  unmatched=0
 ```
 
 It is for anyone who needs to know how a transcript was produced: which audio file (by hash),
@@ -202,11 +136,11 @@ So keep the timestamp at the start of each line, and do not add or move lines in
 whisper_transcribe.py   the guided program: the only entry point
 transcribe_audio.py     speech to text with faster-whisper
 apply_review.py         reviewed transcript + timing to subtitles
-render_video.py         black video with audio, optionally with subtitles
+render_video.py         ffmpeg: black video, and video with burned subtitles
+progress.py             the live progress display
 provenance.py           hashes and the <name>.sha256 record
 whisper-transcribe.cmd  Windows wrapper: sets environment variables, runs the program
 add-to-path.cmd         double-click once: adds this folder to the user PATH
-progress.py             one progress line per step: stage, bar, percent, time left
 CLAUDE.md               guidance for AI assistants working on this code
 ```
 
