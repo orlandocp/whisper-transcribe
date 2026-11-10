@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Media and transcripts are data, not code: never commit them
+*.m4a
+*.mp3
+*.wav
+*.ogg
+*.opus
+*.aac
+*.flac
+*.mp4
+*.srt
+*.srt.bck
+*.txt
