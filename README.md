@@ -52,7 +52,7 @@ If the folder has more than one audio file, the program asks which one to use.
 The program then works in steps. Each time you run it, it checks which files exist next to the audio and continues from there.
 
 1. **Transcribe.** It asks which model to use (Enter keeps `large-v3-turbo`). It creates the transcript, the automatic subtitles, and a review video that shows those subtitles.
-2. **Review.** Correct `<name>.txt` by listening to the audio. Run `whisper-transcribe` again. It shows every change and asks you to confirm.
+2. **Review.** Correct `<name> (review).txt` by listening to the audio. Run `whisper-transcribe` again. It shows every change and asks you to confirm.
    If you did not change anything, it asks you to confirm that the automatic transcript is official as it is.
    Then it creates the subtitles.
 3. **Video.** It offers to render the video with the subtitles burned in.
@@ -73,12 +73,17 @@ For an audio file named `<name>.m4a`, the program creates these files in the sam
 | File | Created | Meaning |
 |---|---|---|
 | `<name>.txt.bck` | transcribe | the untouched automatic transcript. Do not edit it. |
-| `<name>.txt` | transcribe | the transcript you review and correct |
-| `<name>.srt.bck` | transcribe | the automatic subtitles, untouched; keeps the timing |
-| `<name>.srt` | transcribe, then review | automatic at first, to compare; replaced by the subtitles from your reviewed transcript |
-| `<name>.mp4` | transcribe | video with the audio and the automatic subtitles, for review |
-| `<name> (subtitled).mp4` | review or later | the video with the subtitles burned in |
+| `<name>.srt.bck` | transcribe | the untouched automatic subtitles. Keeps the timing. |
+| `<name> (review).txt` | transcribe | the transcript you correct by hand |
+| `<name> (review).srt` | transcribe | the automatic subtitles, to compare with the audio |
+| `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
+| `<name>.txt` | review | the official transcript: your reviewed text |
+| `<name>.srt` | review | the official subtitles, made from your reviewed text |
+| `<name>.mp4` | review or later | the official video, with the subtitles burned in |
 | `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
+
+The name says the stage: `(review)` means the file is still being reviewed. A name without
+`(review)` is official. Do not edit the official files; edit the `(review)` transcript and run the program again.
 
 There is no status file. The program knows the step from which files exist and from `<name>.sha256`:
 a `subtitles` entry there means a review was confirmed.
