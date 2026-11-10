@@ -103,6 +103,14 @@ def stop(message):
     sys.exit(1)
 
 
+def start_over(reason):
+    stop(f"{reason}\n"
+         "The program cannot continue safely from here. Start over:\n"
+         "  1. Move every file of this recording (all names that start with the audio's name,\n"
+         "     except the audio itself) to another folder.\n"
+         "  2. Run whisper-transcribe again in this folder.")
+
+
 def write_transcript_files(p, audio, segments, model_name, info):
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     with open(p["txt_raw"], "w", encoding="utf-8") as f:
@@ -248,9 +256,7 @@ def step_review(audio, p, args):
 
     recorded_audio = provenance.last_value(p["base"], "transcribed", "audio_sha256")
     if recorded_audio and provenance.file_sha256(audio) != recorded_audio:
-        print("WARNING: this audio file is not the one that was transcribed (the hash differs).")
-        if not ask("Continue anyway?"):
-            stop("Stopped. Nothing was changed.")
+        start_over("This audio file is not the one that was transcribed (the hash differs).")
 
     removed, added = apply_review.changed_lines(p["txt_raw"], p["txt_review"])
     review_name = os.path.basename(p["txt_review"])
@@ -328,11 +334,7 @@ def step_done(audio, p, args):
     official_hash = provenance.file_sha256(p["txt"])
     recorded_hash = provenance.last_value(p["base"], "subtitles", "txt_sha256")
     if official_hash != recorded_hash:
-        print(f"{os.path.basename(p['txt'])} was changed by hand after it was confirmed.")
-        if ask("Reopen the review to correct it through the program?"):
-            reopen(audio, p)
-            return
-        stop("Nothing done. The official files were left as they are.")
+        start_over(f"{os.path.basename(p['txt'])} was changed by hand after it was confirmed.")
 
     if not os.path.exists(p["video"]):
         print("The official text is confirmed, but the final video does not exist. Rendering it now.")

@@ -61,8 +61,9 @@ The program works in steps. Each time you run it, it checks which files exist ne
 3. **Final video.** After you confirm, the program renders `<name>.mp4` with the reviewed subtitles
    burned in, and removes the review files.
 
-Run it again at any time. If the official files were changed by hand, it tells you.
-To correct a confirmed text, it offers to reopen the review.
+Run it again at any time. If the official files were changed by hand, or the audio is not the one
+that was transcribed, the program stops and tells you to start over: move the recording's files to
+another folder and run it again. To correct a confirmed text, it offers to reopen the review.
 
 ### Model choice
 
