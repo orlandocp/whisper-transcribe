@@ -4,28 +4,30 @@
 Run it with no arguments, in the folder that holds the audio file.
 The program reads the files that already exist there and tells you the next step.
 
-File names show the stage:
+While reviewing, the folder holds:
 
   <name> (review).txt.bck      copy of the transcript before review. Do not edit.
   <name> (review).srt.bck      copy of the subtitles before review. Gives the timing.
-  <name> (review).txt          the transcript you correct by hand (only while reviewing).
-  <name> (review).srt          the automatic subtitles, to compare with the audio.
-  <name> (review).mp4          video with the audio and the automatic subtitles.
-  <name>.txt                   official transcript: the reviewed text, once confirmed.
-  <name>.srt                   official subtitles: made from the reviewed text.
-  <name>.mp4                   official video with the subtitles burned in.
+  <name> (review).txt          the transcript you correct by hand.
+  <name> (review).srt          automatic subtitles, to compare with the audio in a player.
+  <name> (review).mp4          black video with the audio, to play with (review).srt.
+
+After you confirm the review, the folder holds:
+
+  <name>.txt                   the official transcript: the reviewed text.
+  <name>.mp4                   the final video, with the reviewed subtitles burned in.
+  <name> (review).txt.bck      kept.
+  <name> (review).srt.bck      kept.
   <name>.sha256                plain-text record of hashes and the steps that were run.
 
 The steps, decided by the files and by the record:
 
-  1. No "<name> (review).txt.bck" yet: transcribe. Creates the backups, the working
-     transcript and the review video.
-  2. No "subtitles" entry in "<name>.sha256" yet, or "(review).txt" exists: review.
-     You correct "(review).txt" by hand. When you run again, the program shows what
-     changed and asks you to confirm. Then "(review).txt" becomes "<name>.txt" and
-     the official subtitles are written.
-  3. Official files exist and nothing is pending: done. You can reopen the review to
-     correct the text again; that copies the official transcript back to "(review).txt".
+  1. No "<name> (review).txt.bck" yet: transcribe.
+  2. Review pending ("(review).txt" exists, or no "subtitles" entry in the record): you
+     correct "(review).txt". When you run again, the program shows what changed and asks
+     you to confirm. Then it renders "<name>.mp4" and removes the review files.
+  3. Done: the official files exist. The program checks them against the record and
+     offers to reopen the review if you want to correct the text again.
 """
 
 import argparse
@@ -33,6 +35,7 @@ import datetime
 import os
 import shutil
 import sys
+import tempfile
 
 import apply_review
 import provenance
@@ -84,7 +87,6 @@ def paths_for(audio):
         "srt_review": base + " (review).srt",
         "video_review": base + " (review).mp4",
         "txt": base + ".txt",
-        "srt": base + ".srt",
         "video": base + ".mp4",
     }
 
@@ -115,6 +117,31 @@ def write_transcript_files(p, audio, segments, model_name, info):
             f.write(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{text}\n\n")
     shutil.copyfile(p["txt_raw"], p["txt_review"])
     shutil.copyfile(p["srt_raw"], p["srt_review"])
+
+
+def render_review_video(audio, p, monitor):
+    """Black video with the audio, no burned subtitles: it plays with (review).srt next to it."""
+    monitor.begin_step(5, 5, "Review video", bar=True)
+    render_video.render_video(audio, p["video_review"], on_progress=monitor.progress)
+    monitor.end_step()
+
+
+def render_final_video(audio, p, monitor, step, total):
+    """Final video with the reviewed subtitles burned in. The subtitles are built in a temporary
+    folder from the confirmed text and the timing of the automatic subtitles."""
+    workdir = tempfile.mkdtemp(prefix="whisper_final_")
+    try:
+        srt_path = os.path.join(workdir, "subtitles.srt")
+        joined, unmatched = apply_review.join(apply_review.read_srt(p["srt_raw"]),
+                                              apply_review.read_transcript(p["txt"]))
+        apply_review.write_srt(joined, srt_path)
+        monitor.begin_step(step, total, "Rendering final video", bar=True)
+        render_video.render_video(audio, p["video"], subtitles_path=srt_path,
+                                  on_progress=monitor.progress)
+        monitor.end_step()
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    return unmatched
 
 
 # -------------------------------------------------------------- step 1
@@ -157,12 +184,9 @@ def step_transcribe(audio, p, args):
         faster_whisper=_library_version(),
         program=provenance.tool_version(HERE),
     )
+    monitor.end_step()
 
-    monitor.end_step()
-    monitor.begin_step(5, 5, "Review video", bar=True)
-    render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"],
-                              on_progress=monitor.progress)
-    monitor.end_step()
+    render_review_video(audio, p, monitor)
     monitor.close()
     provenance.append_event(p["base"], "review-video",
                             file=os.path.basename(p["video_review"]),
@@ -171,11 +195,13 @@ def step_transcribe(audio, p, args):
     print(f"\nTranscript created: {len(segments)} segments.")
     show_files(p, ["txt_raw", "srt_raw", "txt_review", "srt_review", "video_review"])
     print("\nNEXT STEP: review the transcript.")
-    print(f"  1. Open {os.path.basename(p['txt_review'])} and {os.path.basename(p['video_review'])}"
-          " (the video shows the automatic subtitles).")
-    print("  2. Correct the text while you listen. Keep the [h:mm:ss] at the start of each line.")
+    print(f"  1. Open {os.path.basename(p['video_review'])} in a player. Its subtitles file"
+          f" {os.path.basename(p['srt_review'])} sits next to it and loads automatically.")
+    print(f"  2. Correct {os.path.basename(p['txt_review'])} while you listen. Keep the [h:mm:ss]"
+          " at the start of each line.")
     print("  3. Mark what you cannot understand as ___ instead of guessing.")
-    print(f"  4. Do not edit {os.path.basename(p['txt_raw'])}: it is the untouched automatic version.")
+    print(f"  4. Do not edit {os.path.basename(p['txt_raw'])} or {os.path.basename(p['srt_raw'])}:"
+          " they are the untouched automatic version.")
     print("  5. Run whisper-transcribe again in this folder.")
 
 
@@ -209,33 +235,6 @@ def show_changes(removed, added):
         print(f"  ... and {len(by_time) - shown} more")
 
 
-def make_official(p, unchanged_confirmed, removed, added):
-    """Turn the confirmed (review) transcript into the official files."""
-    raw_segments = apply_review.read_srt(p["srt_raw"])
-    reviewed = apply_review.read_transcript(p["txt_review"])
-    joined, unmatched = apply_review.join(raw_segments, reviewed)
-    apply_review.write_srt(joined, p["srt"])
-    txt_hash = provenance.file_sha256(p["txt_review"])
-    os.replace(p["txt_review"], p["txt"])
-    print(f"\nOfficial: {os.path.basename(p['txt'])} and {os.path.basename(p['srt'])} "
-          f"({len(joined)} subtitle segments). The (review) copy was removed.")
-
-    if unmatched:
-        print(f"\nWARNING: {len(unmatched)} reviewed line(s) matched no subtitle segment and were NOT used:")
-        for seconds, text in unmatched[:SHOW_CHANGES]:
-            print(f"  [{hms(seconds)}] {text}")
-        print("Check that their [h:mm:ss] was not changed.")
-
-    provenance.append_event(
-        p["base"], "subtitles",
-        txt_sha256=txt_hash,
-        srt_sha256=provenance.file_sha256(p["srt"]),
-        changed_lines=len(removed) + len(added),
-        unchanged_confirmed="yes" if unchanged_confirmed else "no",
-        unmatched=len(unmatched),
-    )
-
-
 def step_review(audio, p, args):
     print(f"Audio: {os.path.basename(audio)}")
     if not os.path.exists(p["txt_review"]):
@@ -264,30 +263,56 @@ def step_review(audio, p, args):
             stop("Nothing done.")
         unchanged = False
 
-    make_official(p, unchanged, removed, added)
+    make_official(audio, p, unchanged, removed, added)
 
-    if ask("Render the video with the subtitles burned in now?", default=True):
-        step_video(audio, p)
-    else:
-        print("Later, run whisper-transcribe again to render the video.")
+
+def make_official(audio, p, unchanged_confirmed, removed, added):
+    """Render the final video first, then make the confirmed text official and clean up.
+
+    If anything fails before the last steps, the review files are still there and the
+    next run continues from them.
+    """
+    txt_hash = provenance.file_sha256(p["txt_review"])
+    # 1. the confirmed text, read as the official one, is needed to build the subtitles
+    shutil.copyfile(p["txt_review"], p["txt"])
+
+    monitor = Monitor()
+    unmatched = render_final_video(audio, p, monitor, 1, 1)
+    monitor.close()
+
+    if unmatched:
+        print(f"\nWARNING: {len(unmatched)} reviewed line(s) matched no subtitle segment and were NOT used:")
+        for seconds, text in unmatched[:SHOW_CHANGES]:
+            print(f"  [{hms(seconds)}] {text}")
+        print("Check that their [h:mm:ss] was not changed.")
+
+    # 2. the official record, then removal of the review files
+    provenance.append_event(
+        p["base"], "subtitles",
+        txt_sha256=txt_hash,
+        changed_lines=len(removed) + len(added),
+        unchanged_confirmed="yes" if unchanged_confirmed else "no",
+        unmatched=len(unmatched),
+    )
+    provenance.append_event(p["base"], "video-subtitled",
+                            file=os.path.basename(p["video"]),
+                            sha256=provenance.file_sha256(p["video"]))
+    os.remove(p["txt_review"])
+    for key in ("srt_review", "video_review"):
+        if os.path.exists(p[key]):
+            os.remove(p[key])
+    print(f"\nOfficial: {os.path.basename(p['txt'])} and {os.path.basename(p['video'])}.")
+    print("The review files were removed; the automatic copies (.bck) were kept.")
 
 
 # -------------------------------------------------------------- step 3
 
-def step_video(audio, p):
-    monitor = Monitor()
-    monitor.begin_step(1, 1, "Rendering video", bar=True)
-    render_video.render_video(audio, p["video"], subtitles_path=p["srt"], on_progress=monitor.progress)
-    monitor.end_step()
-    monitor.close()
-    provenance.append_event(p["base"], "video-subtitled",
-                            file=os.path.basename(p["video"]),
-                            sha256=provenance.file_sha256(p["video"]))
-    print(f"Video: {os.path.basename(p['video'])}")
-
-
-def reopen(p):
+def reopen(audio, p):
     shutil.copyfile(p["txt"], p["txt_review"])
+    shutil.copyfile(p["srt_raw"], p["srt_review"])
+    monitor = Monitor()
+    render_review_video(audio, p, monitor)
+    monitor.close()
     provenance.append_event(p["base"], "reopened", file=os.path.basename(p["txt_review"]))
     print(f"Reopened: {os.path.basename(p['txt_review'])} is a copy of the official transcript.")
     print("Correct it, then run whisper-transcribe again. The official files will be updated.")
@@ -300,20 +325,24 @@ def step_done(audio, p, args):
     if official_hash != recorded_hash:
         print(f"{os.path.basename(p['txt'])} was changed by hand after it was confirmed.")
         if ask("Reopen the review to correct it through the program?"):
-            reopen(p)
+            reopen(audio, p)
             return
         stop("Nothing done. The official files were left as they are.")
 
     if not os.path.exists(p["video"]):
-        print("The official subtitles are up to date, but the video does not exist yet.")
-        if ask("Render it now?", default=True):
-            step_video(audio, p)
-    else:
-        print("Everything is done for this audio:")
-        show_files(p, ["txt", "srt", "video"])
+        print("The official text is confirmed, but the final video does not exist. Rendering it now.")
+        monitor = Monitor()
+        render_final_video(audio, p, monitor, 1, 1)
+        monitor.close()
+        provenance.append_event(p["base"], "video-subtitled",
+                                file=os.path.basename(p["video"]),
+                                sha256=provenance.file_sha256(p["video"]))
+
+    print("Everything is done for this audio:")
+    show_files(p, ["txt", "video"])
 
     if ask("Reopen the review to correct the text?"):
-        reopen(p)
+        reopen(audio, p)
 
 
 # -------------------------------------------------------------- main
