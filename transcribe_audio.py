@@ -34,6 +34,15 @@ def pick_device():
     return "cpu", "int8"
 
 
+def cached_model_path(model_name):
+    """Local path of the model if it is already downloaded, otherwise None. Never downloads."""
+    try:
+        from faster_whisper.utils import download_model
+        return download_model(model_name, local_files_only=True)
+    except Exception:
+        return None
+
+
 def transcribe_audio(audio_path, model_name, language, log=print):
     """Return (segments, info). segments is a list of (start_seconds, end_seconds, text)."""
     try:
@@ -43,7 +52,11 @@ def transcribe_audio(audio_path, model_name, language, log=print):
 
     device, compute_type = pick_device()
     log(f"Loading model '{model_name}' on {device} ({compute_type})...")
-    log("The first time, the model is downloaded (about 1.5 GB).")
+    cached = cached_model_path(model_name)
+    if cached:
+        log(f"Model found in the local cache: {cached}")
+    else:
+        log("Model not in the local cache: downloading it now (about 1.5 GB, only once).")
     model = WhisperModel(model_name, device=device, compute_type=compute_type)
 
     def run(path):
