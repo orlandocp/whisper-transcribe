@@ -88,6 +88,50 @@ To correct an official transcript, run the program and choose to reopen the revi
 
 ### Progress
 
+The terminal shows the steps as they finish, and the current step below them:
+
+```
+1/5 Decoding audio: done in 00:00:01
+2/5 Loading model: done in 00:00:05
+Step 3/5: Transcribing
+[#############-----------------]  43%  elapsed 00:00:22  left ~00:00:29
+```
+
+The current step's bar shows real progress where it can be measured: decoding, transcribing and
+rendering video. Loading the model and writing files show only elapsed time. The time left is
+estimated from the speed measured so far in that step. Elapsed and left time update every second.
+
+This needs a terminal that redraws in place, such as Windows Terminal or the classic console.
+
+### Model choice
+
+| Model | Speed | Accuracy |
+|---|---|---|
+| `large-v3-turbo` (default) | faster | close to `large-v3` |
+| `large-v3` | slower | the most accurate of the two |
+
+## Files
+
+For an audio file named `<name>.m4a`, the program creates these files in the same folder:
+
+| File | Created | Meaning |
+|---|---|---|
+| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
+| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
+| `<name> (review).txt` | transcribe | the transcript you correct by hand. Exists only while reviewing. |
+| `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
+| `<name>.txt` | review | the official transcript: your reviewed text |
+| `<name>.srt` | review | the official subtitles, made from your reviewed text |
+| `<name>.mp4` | review or later | the official video, with the subtitles burned in |
+| `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
+
+The name says the stage: `(review)` means the file is still being reviewed. A name without
+`(review)` is official. Confirming the review renames `(review).txt` to `<name>.txt`.
+To correct an official transcript, run the program and choose to reopen the review: it creates
+`(review).txt` again as a copy of the official one.
+
+### Progress
+
 Two lines show the work:
 
 - **Total (decode + transcription)**: the measurable work of the whole run. Its share is

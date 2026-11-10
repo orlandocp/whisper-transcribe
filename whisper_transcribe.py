@@ -139,13 +139,13 @@ def choose_model(cli_model):
 def step_transcribe(audio, p, args):
     print(f"Audio: {os.path.basename(audio)}")
     model_name = choose_model(args.model)
-    monitor = Monitor(show_total=True)
+    monitor = Monitor()
     segments, info = transcribe_audio.transcribe_audio(audio, model_name, args.language, monitor)
     if not segments:
         monitor.close()
         stop("No speech was found in this audio. Nothing was written.")
 
-    monitor.begin_step("4/5 Writing files", bar=False)
+    monitor.begin_step(4, 5, "Writing files", bar=False)
     write_transcript_files(p, audio, segments, model_name, info)
     provenance.append_event(
         p["base"], "transcribed",
@@ -159,7 +159,7 @@ def step_transcribe(audio, p, args):
     )
 
     monitor.end_step()
-    monitor.begin_step("5/5 Review video", bar=True)
+    monitor.begin_step(5, 5, "Review video", bar=True)
     render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"],
                               on_progress=monitor.progress)
     monitor.end_step()
@@ -275,8 +275,8 @@ def step_review(audio, p, args):
 # -------------------------------------------------------------- step 3
 
 def step_video(audio, p):
-    monitor = Monitor(show_total=False)
-    monitor.begin_step("Rendering video", bar=True)
+    monitor = Monitor()
+    monitor.begin_step(1, 1, "Rendering video", bar=True)
     render_video.render_video(audio, p["video"], subtitles_path=p["srt"], on_progress=monitor.progress)
     monitor.end_step()
     monitor.close()
