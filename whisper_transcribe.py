@@ -38,7 +38,7 @@ import apply_review
 import provenance
 import render_video
 import transcribe_audio
-from progress import Progress
+from progress import Monitor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIO_EXTENSIONS = (".m4a", ".mp3", ".wav", ".ogg", ".opus", ".aac", ".flac")
@@ -139,10 +139,13 @@ def choose_model(cli_model):
 def step_transcribe(audio, p, args):
     print(f"Audio: {os.path.basename(audio)}")
     model_name = choose_model(args.model)
-    segments, info = transcribe_audio.transcribe_audio(audio, model_name, args.language)
+    monitor = Monitor(show_total=True)
+    segments, info = transcribe_audio.transcribe_audio(audio, model_name, args.language, monitor)
     if not segments:
+        monitor.close()
         stop("No speech was found in this audio. Nothing was written.")
 
+    monitor.begin_step("4/5 Writing files", bar=False)
     write_transcript_files(p, audio, segments, model_name, info)
     provenance.append_event(
         p["base"], "transcribed",
@@ -155,10 +158,12 @@ def step_transcribe(audio, p, args):
         program=provenance.tool_version(HERE),
     )
 
-    bar = Progress("5/5 Review video")
+    monitor.end_step()
+    monitor.begin_step("5/5 Review video", bar=True)
     render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"],
-                              on_progress=bar.update)
-    bar.finish()
+                              on_progress=monitor.progress)
+    monitor.end_step()
+    monitor.close()
     provenance.append_event(p["base"], "review-video",
                             file=os.path.basename(p["video_review"]),
                             sha256=provenance.file_sha256(p["video_review"]))
@@ -270,9 +275,11 @@ def step_review(audio, p, args):
 # -------------------------------------------------------------- step 3
 
 def step_video(audio, p):
-    bar = Progress("Rendering video")
-    render_video.render_video(audio, p["video"], subtitles_path=p["srt"], on_progress=bar.update)
-    bar.finish()
+    monitor = Monitor(show_total=False)
+    monitor.begin_step("Rendering video", bar=True)
+    render_video.render_video(audio, p["video"], subtitles_path=p["srt"], on_progress=monitor.progress)
+    monitor.end_step()
+    monitor.close()
     provenance.append_event(p["base"], "video-subtitled",
                             file=os.path.basename(p["video"]),
                             sha256=provenance.file_sha256(p["video"]))

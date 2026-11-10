@@ -88,6 +88,45 @@ To correct an official transcript, run the program and choose to reopen the revi
 
 ### Progress
 
+Two lines show the work:
+
+- **Total (decode + transcription)**: the measurable work of the whole run. Its share is
+  estimated from the speed measured on this run, so it reads "estimating..." until transcription
+  has processed a little audio.
+- **The current step**: its own bar when it has measurable progress (decoding, transcribing,
+  rendering video). Loading the model shows only its elapsed time, because it has no measurable progress.
+
+Loading the model and rendering video are not part of the total.
+
+### Model choice
+
+| Model | Speed | Accuracy |
+|---|---|---|
+| `large-v3-turbo` (default) | faster | close to `large-v3` |
+| `large-v3` | slower | the most accurate of the two |
+
+## Files
+
+For an audio file named `<name>.m4a`, the program creates these files in the same folder:
+
+| File | Created | Meaning |
+|---|---|---|
+| `<name> (review).txt.bck` | transcribe | copy of the transcript before review. Do not edit it. |
+| `<name> (review).srt.bck` | transcribe | copy of the subtitles before review. Keeps the timing. |
+| `<name> (review).txt` | transcribe | the transcript you correct by hand. Exists only while reviewing. |
+| `<name> (review).mp4` | transcribe | video with the audio and the automatic subtitles, for review |
+| `<name>.txt` | review | the official transcript: your reviewed text |
+| `<name>.srt` | review | the official subtitles, made from your reviewed text |
+| `<name>.mp4` | review or later | the official video, with the subtitles burned in |
+| `<name>.sha256` | every step | plain-text record: hashes, model, date, and the steps run |
+
+The name says the stage: `(review)` means the file is still being reviewed. A name without
+`(review)` is official. Confirming the review renames `(review).txt` to `<name>.txt`.
+To correct an official transcript, run the program and choose to reopen the review: it creates
+`(review).txt` again as a copy of the official one.
+
+### Progress
+
 Each long step shows a bar with its own exact progress: decoding the audio, transcribing,
 and rendering video. Loading the model has no progress information, so it shows only the time.
 The whole recording is transcribed in one pass, so the bar is continuous.

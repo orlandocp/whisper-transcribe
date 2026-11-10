@@ -1,16 +1,14 @@
 """Speech to text with faster-whisper: an audio file in, timed text segments out.
 
 The audio is decoded once to 16 kHz mono and transcribed as a whole, so the
-progress bar covers the entire recording. Nothing is written except a temporary
+progress covers the entire recording. Nothing is written except a temporary
 decoded copy, which is removed afterwards.
 """
 
 import os
 import shutil
 import tempfile
-import time
 
-from progress import Progress, clock
 from render_video import audio_duration, run_ffmpeg
 
 MODELS = {
@@ -44,7 +42,7 @@ def cached_model_path(model_name):
         return None
 
 
-def transcribe_audio(audio_path, model_name, language, log=print):
+def transcribe_audio(audio_path, model_name, language, monitor, log=print):
     """Return (segments, info). segments is a list of (start_seconds, end_seconds, text)."""
     try:
         from faster_whisper import WhisperModel
@@ -52,24 +50,25 @@ def transcribe_audio(audio_path, model_name, language, log=print):
         raise SystemExit("ERROR: faster-whisper is not installed in this Python. See README, Setup.")
 
     duration = audio_duration(audio_path)
+    device, compute_type = pick_device()
+    cached = cached_model_path(model_name)
+    where = "found in the local cache" if cached else "NOT in the local cache: downloading (about 1.5 GB, once)"
+    log(f"Model '{model_name}' on {device} ({compute_type}): {where}")
+    if cached:
+        log(f"  {cached}")
+
     workdir = tempfile.mkdtemp(prefix="whisper_")
     try:
         wav = os.path.join(workdir, "audio_16k.wav")
-        decode = Progress("1/5 Decoding audio")
+        monitor.begin_step("1/5 Decoding audio", bar=True, counts=True)
         run_ffmpeg(["ffmpeg", "-y", "-loglevel", "error", "-i", audio_path,
                     "-ar", "16000", "-ac", "1", wav],
-                   duration, decode.update)
-        decode.finish()
+                   duration, monitor.progress)
+        monitor.end_step()
 
-        device, compute_type = pick_device()
-        cached = cached_model_path(model_name)
-        where = "found in the local cache" if cached else "NOT in the local cache: downloading (about 1.5 GB, once)"
-        log(f"Model '{model_name}' on {device} ({compute_type}): {where}")
-        if cached:
-            log(f"  {cached}")
-        started = time.time()
+        monitor.begin_step("2/5 Loading model", bar=False)
         model = WhisperModel(model_name, device=device, compute_type=compute_type)
-        log(f"Model loaded in {clock(time.time() - started)}")
+        monitor.end_step()
 
         segments, info = model.transcribe(
             wav,
@@ -80,15 +79,15 @@ def transcribe_audio(audio_path, model_name, language, log=print):
             condition_on_previous_text=False,
         )
         total = info.duration or duration or 0
-        bar = Progress("3/5 Transcribing")
+        monitor.begin_step("3/5 Transcribing", bar=True, counts=True, forecast=True)
         result = []
         for s in segments:
             text = s.text.strip()
             if text:
                 result.append((s.start, s.end, text))
             if total:
-                bar.update(s.end / total)
-        bar.finish(f"{len(result)} segments")
+                monitor.progress(s.end / total)
+        monitor.end_step()
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
