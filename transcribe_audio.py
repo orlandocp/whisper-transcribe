@@ -1,16 +1,17 @@
-"""Speech-to-text with faster-whisper: an audio file in, timed text segments out.
+"""Speech to text with faster-whisper: an audio file in, timed text segments out.
 
-Nothing is written here. The caller decides where results go.
+The audio is decoded once to 16 kHz mono and transcribed as a whole, so the
+progress bar covers the entire recording. Nothing is written except a temporary
+decoded copy, which is removed afterwards.
 """
 
 import os
 import shutil
-import subprocess
 import tempfile
+import time
 
-from render_video import audio_duration
-
-CHUNK_SECONDS = 10 * 60  # long audio is processed in blocks to bound memory use
+from progress import Progress, clock
+from render_video import audio_duration, run_ffmpeg
 
 MODELS = {
     "large-v3-turbo": "faster, close to large-v3 quality",
@@ -50,63 +51,50 @@ def transcribe_audio(audio_path, model_name, language, log=print):
     except ImportError:
         raise SystemExit("ERROR: faster-whisper is not installed in this Python. See README, Setup.")
 
-    device, compute_type = pick_device()
-    log(f"Loading model '{model_name}' on {device} ({compute_type})...")
-    cached = cached_model_path(model_name)
-    if cached:
-        log(f"Model found in the local cache: {cached}")
-    else:
-        log("Model not in the local cache: downloading it now (about 1.5 GB, only once).")
-    model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    duration = audio_duration(audio_path)
+    workdir = tempfile.mkdtemp(prefix="whisper_")
+    try:
+        wav = os.path.join(workdir, "audio_16k.wav")
+        decode = Progress("Decoding")
+        run_ffmpeg(["ffmpeg", "-y", "-loglevel", "error", "-i", audio_path,
+                    "-ar", "16000", "-ac", "1", wav],
+                   duration, decode.update)
+        decode.finish()
 
-    def run(path):
+        device, compute_type = pick_device()
+        cached = cached_model_path(model_name)
+        where = "found in the local cache" if cached else "NOT in the local cache: downloading (about 1.5 GB, once)"
+        log(f"Model '{model_name}' on {device} ({compute_type}): {where}")
+        if cached:
+            log(f"  {cached}")
+        started = time.time()
+        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        log(f"Model loaded in {clock(time.time() - started)}")
+
         segments, info = model.transcribe(
-            path,
+            wav,
             language=language,
             beam_size=5,
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
             condition_on_previous_text=False,
         )
-        return segments, info
-
-    duration = audio_duration(audio_path)
-    result = []
-    detected = None
-
-    if not duration or duration <= CHUNK_SECONDS:
-        segments, info = run(audio_path)
-        detected = info
+        total = info.duration or duration or 0
+        bar = Progress("Transcribing")
+        result = []
         for s in segments:
-            result.append((s.start, s.end, s.text.strip()))
-    else:
-        blocks = int(duration // CHUNK_SECONDS) + (1 if duration % CHUNK_SECONDS else 0)
-        log(f"Long recording: {blocks} blocks of 10 minutes.")
-        tmpdir = tempfile.mkdtemp(prefix="whisper_blocks_")
-        try:
-            for i in range(blocks):
-                offset = i * CHUNK_SECONDS
-                block = os.path.join(tmpdir, f"block_{i:03d}.wav")
-                subprocess.run(
-                    ["ffmpeg", "-y", "-loglevel", "error", "-i", audio_path,
-                     "-ss", str(offset), "-t", str(CHUNK_SECONDS),
-                     "-ar", "16000", "-ac", "1", block],
-                    check=True,
-                )
-                segments, info = run(block)
-                if detected is None:
-                    detected = info
-                log(f"  block {i + 1}/{blocks} (starts at {offset // 60} min)")
-                for s in segments:
-                    result.append((s.start + offset, s.end + offset, s.text.strip()))
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            text = s.text.strip()
+            if text:
+                result.append((s.start, s.end, text))
+            if total:
+                bar.update(s.end / total, text)
+        bar.finish(f"{len(result)} segments")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
-    result = [seg for seg in result if seg[2]]
-    info = {
-        "language": detected.language if detected else language,
-        "language_probability": round(detected.language_probability, 2) if detected else None,
+    return result, {
+        "language": info.language,
+        "language_probability": round(info.language_probability, 2),
         "device": device,
         "compute_type": compute_type,
     }
-    return result, info

@@ -1,4 +1,4 @@
-"""Video output with ffmpeg: a black picture with the audio, optionally with burned-in subtitles."""
+"""ffmpeg work: audio duration, progress-reporting runs, and the video output."""
 
 import os
 import shutil
@@ -19,11 +19,35 @@ def audio_duration(path):
         return None
 
 
-def render_video(audio_path, out_path, subtitles_path=None):
+def run_ffmpeg(cmd, duration, on_progress=None, cwd=None):
+    """Run an ffmpeg command whose output file is its last argument.
+
+    If duration and on_progress are given, ffmpeg's own progress report is read
+    and on_progress(fraction) is called with the exact share of the work done.
+    """
+    if not (on_progress and duration):
+        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    else:
+        cmd = cmd[:-1] + ["-progress", "pipe:1", "-nostats"] + cmd[-1:]
+        proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", errors="replace")
+        for line in proc.stdout:
+            if line.startswith("out_time_us="):
+                try:
+                    on_progress(int(line.split("=", 1)[1]) / 1_000_000 / duration)
+                except ValueError:
+                    pass
+        stderr = proc.communicate()[1]
+        result = subprocess.CompletedProcess(cmd, proc.returncode, "", stderr)
+    if result.returncode != 0:
+        raise SystemExit(f"ERROR: ffmpeg failed:\n{(result.stderr or '').strip()}")
+
+
+def render_video(audio_path, out_path, subtitles_path=None, on_progress=None):
     """Write out_path: a black 640x360 video with the audio.
 
-    If subtitles_path is given, its text is burned in, in yellow.
-    ffmpeg runs from the subtitles' folder so the filter needs no path escaping.
+    If subtitles_path is given, its text is burned in, in yellow. The subtitles are
+    copied to a temporary folder and ffmpeg runs there, so file names do not matter.
     """
     duration = audio_duration(audio_path)
     if not duration:
@@ -40,7 +64,7 @@ def render_video(audio_path, out_path, subtitles_path=None):
     cmd += ["-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac",
             os.path.abspath(out_path)]
     try:
-        subprocess.run(cmd, check=True, cwd=tmpdir)
+        run_ffmpeg(cmd, duration, on_progress, cwd=tmpdir)
     finally:
         if tmpdir:
             shutil.rmtree(tmpdir, ignore_errors=True)

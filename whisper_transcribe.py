@@ -8,7 +8,7 @@ File names show the stage:
 
   <name> (review).txt.bck      copy of the transcript before review. Do not edit.
   <name> (review).srt.bck      copy of the subtitles before review. Gives the timing.
-  <name> (review).txt          the transcript you correct by hand.
+  <name> (review).txt          the transcript you correct by hand (only while reviewing).
   <name> (review).mp4          video with the audio and the automatic subtitles.
   <name>.txt                   official transcript: the reviewed text, once confirmed.
   <name>.srt                   official subtitles: made from the reviewed text.
@@ -17,12 +17,14 @@ File names show the stage:
 
 The steps, decided by the files and by the record:
 
-  1. No "<name> (review).txt.bck" yet: transcribe. Creates the backups and the
-                                       working transcript.
-  2. No "subtitles" entry in "<name>.sha256" yet: review. You correct
-     "<name> (review).txt" by hand. When you run again, the program shows what
-     changed and asks you to confirm. Then it writes the official files.
-  3. A review was confirmed:    done, or offer to regenerate if the text changed.
+  1. No "<name> (review).txt.bck" yet: transcribe. Creates the backups, the working
+     transcript and the review video.
+  2. No "subtitles" entry in "<name>.sha256" yet, or "(review).txt" exists: review.
+     You correct "(review).txt" by hand. When you run again, the program shows what
+     changed and asks you to confirm. Then "(review).txt" becomes "<name>.txt" and
+     the official subtitles are written.
+  3. Official files exist and nothing is pending: done. You can reopen the review to
+     correct the text again; that copies the official transcript back to "(review).txt".
 """
 
 import argparse
@@ -35,6 +37,7 @@ import apply_review
 import provenance
 import render_video
 import transcribe_audio
+from progress import Progress
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIO_EXTENSIONS = (".m4a", ".mp3", ".wav", ".ogg", ".opus", ".aac", ".flac")
@@ -149,8 +152,10 @@ def step_transcribe(audio, p, args):
         program=provenance.tool_version(HERE),
     )
 
-    print("\nWriting the review video (with the automatic subtitles)...")
-    render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"])
+    bar = Progress("Review video")
+    render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"],
+                              on_progress=bar.update)
+    bar.finish()
     provenance.append_event(p["base"], "review-video",
                             file=os.path.basename(p["video_review"]),
                             sha256=provenance.file_sha256(p["video_review"]))
@@ -196,15 +201,16 @@ def show_changes(removed, added):
         print(f"  ... and {len(by_time) - shown} more")
 
 
-def write_official(p, unchanged_confirmed, removed, added):
-    """Write the official transcript and subtitles from the (review) transcript."""
+def make_official(p, unchanged_confirmed, removed, added):
+    """Turn the confirmed (review) transcript into the official files."""
     raw_segments = apply_review.read_srt(p["srt_raw"])
     reviewed = apply_review.read_transcript(p["txt_review"])
     joined, unmatched = apply_review.join(raw_segments, reviewed)
     apply_review.write_srt(joined, p["srt"])
-    shutil.copyfile(p["txt_review"], p["txt"])
-    print(f"\nWritten: {os.path.basename(p['txt'])} and {os.path.basename(p['srt'])} "
-          f"({len(joined)} subtitle segments)")
+    txt_hash = provenance.file_sha256(p["txt_review"])
+    os.replace(p["txt_review"], p["txt"])
+    print(f"\nOfficial: {os.path.basename(p['txt'])} and {os.path.basename(p['srt'])} "
+          f"({len(joined)} subtitle segments). The (review) copy was removed.")
 
     if unmatched:
         print(f"\nWARNING: {len(unmatched)} reviewed line(s) matched no subtitle segment and were NOT used:")
@@ -214,7 +220,7 @@ def write_official(p, unchanged_confirmed, removed, added):
 
     provenance.append_event(
         p["base"], "subtitles",
-        txt_sha256=provenance.file_sha256(p["txt_review"]),
+        txt_sha256=txt_hash,
         srt_sha256=provenance.file_sha256(p["srt"]),
         changed_lines=len(removed) + len(added),
         unchanged_confirmed="yes" if unchanged_confirmed else "no",
@@ -224,6 +230,10 @@ def write_official(p, unchanged_confirmed, removed, added):
 
 def step_review(audio, p, args):
     print(f"Audio: {os.path.basename(audio)}")
+    if not os.path.exists(p["txt_review"]):
+        shutil.copyfile(p["txt_raw"], p["txt_review"])
+        print(f"Recreated {os.path.basename(p['txt_review'])} from the automatic copy.")
+
     recorded_audio = provenance.last_value(p["base"], "transcribed", "audio_sha256")
     if recorded_audio and provenance.file_sha256(audio) != recorded_audio:
         print("WARNING: this audio file is not the one that was transcribed (the hash differs).")
@@ -242,11 +252,11 @@ def step_review(audio, p, args):
         print(f"Changes in {review_name} compared with the automatic transcript:")
         show_changes(removed, added)
         print(f"  {len(removed)} line(s) removed or changed, {len(added)} line(s) added or changed.")
-        if not ask("Create the official transcript and subtitles with these changes?"):
+        if not ask("Confirm these changes and create the official files?"):
             stop("Nothing done.")
         unchanged = False
 
-    write_official(p, unchanged, removed, added)
+    make_official(p, unchanged, removed, added)
 
     if ask("Render the video with the subtitles burned in now?", default=True):
         step_video(audio, p)
@@ -257,33 +267,43 @@ def step_review(audio, p, args):
 # -------------------------------------------------------------- step 3
 
 def step_video(audio, p):
-    print("Rendering the video with the subtitles burned in...")
-    render_video.render_video(audio, p["video"], subtitles_path=p["srt"])
+    bar = Progress("Video")
+    render_video.render_video(audio, p["video"], subtitles_path=p["srt"], on_progress=bar.update)
+    bar.finish()
     provenance.append_event(p["base"], "video-subtitled",
                             file=os.path.basename(p["video"]),
                             sha256=provenance.file_sha256(p["video"]))
     print(f"Video: {os.path.basename(p['video'])}")
 
 
+def reopen(p):
+    shutil.copyfile(p["txt"], p["txt_review"])
+    provenance.append_event(p["base"], "reopened", file=os.path.basename(p["txt_review"]))
+    print(f"Reopened: {os.path.basename(p['txt_review'])} is a copy of the official transcript.")
+    print("Correct it, then run whisper-transcribe again. The official files will be updated.")
+
+
 def step_done(audio, p, args):
     print(f"Audio: {os.path.basename(audio)}")
-    current_txt = provenance.file_sha256(p["txt_review"])
-    recorded_txt = provenance.last_value(p["base"], "subtitles", "txt_sha256")
-    if current_txt != recorded_txt:
-        print(f"{os.path.basename(p['txt_review'])} changed after the official files were made.")
-        if ask("Regenerate the official transcript and subtitles from it?"):
-            step_review(audio, p, args)
+    official_hash = provenance.file_sha256(p["txt"])
+    recorded_hash = provenance.last_value(p["base"], "subtitles", "txt_sha256")
+    if official_hash != recorded_hash:
+        print(f"{os.path.basename(p['txt'])} was changed by hand after it was confirmed.")
+        if ask("Reopen the review to correct it through the program?"):
+            reopen(p)
             return
-        stop("Nothing done. The official files still match the earlier review.")
+        stop("Nothing done. The official files were left as they are.")
 
     if not os.path.exists(p["video"]):
-        print("The official files are up to date, but the video does not exist yet.")
+        print("The official subtitles are up to date, but the video does not exist yet.")
         if ask("Render it now?", default=True):
             step_video(audio, p)
-        return
+    else:
+        print("Everything is done for this audio:")
+        show_files(p, ["txt", "srt", "video"])
 
-    print("Everything is done for this audio:")
-    show_files(p, ["txt", "srt", "video"])
+    if ask("Reopen the review to correct the text?"):
+        reopen(p)
 
 
 # -------------------------------------------------------------- main
@@ -329,7 +349,8 @@ def main():
         elif not os.path.exists(p["srt_raw"]):
             stop(f"Broken state: {os.path.basename(p['txt_raw'])} exists but "
                  f"{os.path.basename(p['srt_raw'])} does not. Move the audio's files aside and start again.")
-        elif provenance.last_value(p["base"], "subtitles", "txt_sha256") is None:
+        elif (provenance.last_value(p["base"], "subtitles", "txt_sha256") is None
+              or os.path.exists(p["txt_review"])):
             step_review(audio, p, args)
         else:
             step_done(audio, p, args)
