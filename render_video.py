@@ -1,7 +1,9 @@
 """Video output with ffmpeg: a black picture with the audio, optionally with burned-in subtitles."""
 
 import os
+import shutil
 import subprocess
+import tempfile
 
 
 def audio_duration(path):
@@ -30,11 +32,15 @@ def render_video(audio_path, out_path, subtitles_path=None):
     cmd = ["ffmpeg", "-y", "-loglevel", "error",
            "-f", "lavfi", "-i", "color=c=black:size=640x360:rate=1",
            "-i", os.path.abspath(audio_path), "-t", str(duration)]
-    cwd = None
+    tmpdir = None
     if subtitles_path:
-        cwd = os.path.dirname(os.path.abspath(subtitles_path))
-        cmd += ["-vf", f"subtitles={os.path.basename(subtitles_path)}"
-                       ":force_style='PrimaryColour=&H00FFFF&'"]
+        tmpdir = tempfile.mkdtemp(prefix="whisper_subs_")
+        shutil.copyfile(subtitles_path, os.path.join(tmpdir, "subs.srt"))
+        cmd += ["-vf", "subtitles=subs.srt:force_style='PrimaryColour=&H00FFFF&'"]
     cmd += ["-c:v", "libx264", "-tune", "stillimage", "-c:a", "aac",
             os.path.abspath(out_path)]
-    subprocess.run(cmd, check=True, cwd=cwd)
+    try:
+        subprocess.run(cmd, check=True, cwd=tmpdir)
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)

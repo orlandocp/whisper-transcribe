@@ -6,18 +6,19 @@ The program reads the files that already exist there and tells you the next step
 
 Steps, decided by which files exist next to the audio (no status file is kept):
 
-  1. No "<name>.txt.bck" yet:   transcribe. Creates the working transcript.
-  2. Transcript exists, no "<name>.srt": review. You correct "<name>.txt" by hand.
-     When you run again, the program shows what changed and asks you to confirm.
-     Then it creates the subtitles "<name>.srt".
-  3. Subtitles exist:           done, or offer to regenerate if the text changed.
+  1. No "<name>.txt.bck" yet:   transcribe. Creates the working transcript and the
+                                automatic subtitles "<name>.srt", to compare with.
+  2. No "subtitles" entry in "<name>.sha256" yet: review. You correct "<name>.txt"
+     by hand. When you run again, the program shows what changed and asks you to
+     confirm. Then it replaces "<name>.srt" with the subtitles from your review.
+  3. A review was confirmed:    done, or offer to regenerate if the text changed.
 
 Files created next to the audio:
   <name>.txt.bck         the untouched automatic transcript. Do not edit it.
   <name>.txt             the transcript you review and correct.
-  <name>.srt.bck         the automatic subtitles, with the timing used for <name>.srt.
-  <name>.srt             the subtitles made from the reviewed transcript.
-  <name>.mp4             black video with the audio, for playback during review.
+  <name>.srt.bck         the automatic subtitles. Keeps the timing used for <name>.srt.
+  <name>.srt             automatic subtitles at first; replaced by the reviewed ones.
+  <name>.mp4             video with the audio and the automatic subtitles, for review.
   <name> (subtitled).mp4 the video with the subtitles burned in.
   <name>.sha256          plain-text record of hashes and the commands that were run.
 """
@@ -105,6 +106,7 @@ def write_transcript_files(p, audio, segments, model_name, info):
         for n, (start, end, text) in enumerate(segments, 1):
             f.write(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{text}\n\n")
     shutil.copyfile(p["txt_raw"], p["txt"])
+    shutil.copyfile(p["srt_raw"], p["srt"])
 
 
 # -------------------------------------------------------------- step 1
@@ -145,16 +147,17 @@ def step_transcribe(audio, p, args):
         program=provenance.tool_version(HERE),
     )
 
-    print("\nWriting the review video...")
-    render_video.render_video(audio, p["video_review"])
+    print("\nWriting the review video (with the automatic subtitles)...")
+    render_video.render_video(audio, p["video_review"], subtitles_path=p["srt"])
     provenance.append_event(p["base"], "review-video",
                             file=os.path.basename(p["video_review"]),
                             sha256=provenance.file_sha256(p["video_review"]))
 
     print(f"\nTranscript created: {len(segments)} segments.")
-    show_files(p, ["txt_raw", "txt", "srt_raw", "video_review"])
+    show_files(p, ["txt_raw", "txt", "srt_raw", "srt", "video_review"])
     print("\nNEXT STEP: review the transcript.")
-    print(f"  1. Open {os.path.basename(p['txt'])} and {os.path.basename(p['video_review'])}.")
+    print(f"  1. Open {os.path.basename(p['txt'])} and {os.path.basename(p['video_review'])}"
+          " (the video shows the automatic subtitles).")
     print("  2. Correct the text while you listen. Keep the [h:mm:ss] at the start of each line.")
     print("  3. Mark what you cannot understand as ___ instead of guessing.")
     print(f"  4. Do not edit {os.path.basename(p['txt_raw'])}: it is the untouched automatic version.")
@@ -320,7 +323,7 @@ def main():
         elif not os.path.exists(p["srt_raw"]):
             stop(f"Broken state: {os.path.basename(p['txt_raw'])} exists but "
                  f"{os.path.basename(p['srt_raw'])} does not. Move the audio's files aside and start again.")
-        elif not os.path.exists(p["srt"]):
+        elif provenance.last_value(p["base"], "subtitles", "txt_sha256") is None:
             step_review(audio, p, args)
         else:
             step_done(audio, p, args)
