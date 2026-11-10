@@ -35,7 +35,8 @@ The wrapper reads two settings from environment variables. If they are not set, 
 The first time a model is used, it is downloaded (about 1.5 GB for `large-v3-turbo`).
 After that, the program works offline.
 
-To run `whisper-transcribe` from any folder, add the repository folder to your user `PATH`.
+To run `whisper-transcribe` from any folder, double-click `add-to-path.cmd` in the repository folder.
+It adds the folder to your user `PATH`. Open a new terminal afterwards.
 
 ## Use
 
@@ -108,6 +109,7 @@ apply_review.py         reviewed transcript + timing to subtitles
 render_video.py         black video with audio, optionally with subtitles
 provenance.py           hashes and the <name>.sha256 record
 whisper-transcribe.cmd  Windows wrapper: sets environment variables, runs the program
+add-to-path.cmd         double-click once: adds this folder to the user PATH
 CLAUDE.md               guidance for AI assistants working on this code
 ```
 
