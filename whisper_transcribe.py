@@ -152,7 +152,7 @@ def step_transcribe(audio, p, args):
         program=provenance.tool_version(HERE),
     )
 
-    bar = Progress("Review video")
+    bar = Progress("5/5 Review video")
     render_video.render_video(audio, p["video_review"], subtitles_path=p["srt_raw"],
                               on_progress=bar.update)
     bar.finish()
@@ -267,7 +267,7 @@ def step_review(audio, p, args):
 # -------------------------------------------------------------- step 3
 
 def step_video(audio, p):
-    bar = Progress("Video")
+    bar = Progress("Rendering video")
     render_video.render_video(audio, p["video"], subtitles_path=p["srt"], on_progress=bar.update)
     bar.finish()
     provenance.append_event(p["base"], "video-subtitled",

@@ -55,7 +55,7 @@ def transcribe_audio(audio_path, model_name, language, log=print):
     workdir = tempfile.mkdtemp(prefix="whisper_")
     try:
         wav = os.path.join(workdir, "audio_16k.wav")
-        decode = Progress("Decoding")
+        decode = Progress("1/5 Decoding audio")
         run_ffmpeg(["ffmpeg", "-y", "-loglevel", "error", "-i", audio_path,
                     "-ar", "16000", "-ac", "1", wav],
                    duration, decode.update)
@@ -80,14 +80,14 @@ def transcribe_audio(audio_path, model_name, language, log=print):
             condition_on_previous_text=False,
         )
         total = info.duration or duration or 0
-        bar = Progress("Transcribing")
+        bar = Progress("3/5 Transcribing")
         result = []
         for s in segments:
             text = s.text.strip()
             if text:
                 result.append((s.start, s.end, text))
             if total:
-                bar.update(s.end / total, text)
+                bar.update(s.end / total)
         bar.finish(f"{len(result)} segments")
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
