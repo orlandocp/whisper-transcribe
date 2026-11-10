@@ -240,6 +240,11 @@ def step_review(audio, p, args):
     if not os.path.exists(p["txt_review"]):
         shutil.copyfile(p["txt_raw"], p["txt_review"])
         print(f"Recreated {os.path.basename(p['txt_review'])} from the automatic copy.")
+    if not os.path.exists(p["video_review"]):
+        print(f"Recreating {os.path.basename(p['video_review'])} (black video, no subtitles burned in).")
+        monitor = Monitor()
+        render_review_video(audio, p, monitor)
+        monitor.close()
 
     recorded_audio = provenance.last_value(p["base"], "transcribed", "audio_sha256")
     if recorded_audio and provenance.file_sha256(audio) != recorded_audio:
