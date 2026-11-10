@@ -334,7 +334,17 @@ def step_done(audio, p, args):
     official_hash = provenance.file_sha256(p["txt"])
     recorded_hash = provenance.last_value(p["base"], "subtitles", "txt_sha256")
     if official_hash != recorded_hash:
-        start_over(f"{os.path.basename(p['txt'])} was changed by hand after it was confirmed.")
+        print(f"WARNING: {os.path.basename(p['txt'])} changed after it was confirmed.")
+        print("The program does not know what changed. It can only compare with the automatic version.")
+        if not ask("Reopen the review? The edited text is kept as a separate copy."):
+            print("Nothing done. The official files were left as they are.")
+            return
+        manual = p["base"] + " (manual-edit).txt"
+        if not os.path.exists(manual):
+            shutil.copyfile(p["txt"], manual)
+            print(f"Kept the edited text as {os.path.basename(manual)}.")
+        reopen(audio, p)
+        return
 
     if not os.path.exists(p["video"]):
         print("The official text is confirmed, but the final video does not exist. Rendering it now.")
